@@ -20,7 +20,7 @@ Usage:
 
     table   = setup_hapi(species)		  # this loads/downloads HITRAN data for molecules in species arrays and saves them to hit_path
 
-5 - you can now generate a transmittance spectrum
+5 - you can now generate a transmittance spectrum where mol is an entry in species array, e.g. 'CH4'
 
     nu, spec = gen_transmission(mol,v0,vf,pres=pres, temp=temp, path_length=path_length)
 
