@@ -1,6 +1,6 @@
 Usage:
 
-0 - import hapi/(maybe also some hapi fxns..) if importing genspec.py, but I recommend editing it locally and running it
+0 - import hapi/(maybe also some hapi fxns..) if importing genspec.py instead of just running an edited version
 
 1 - make location to store hitran files
 
@@ -20,9 +20,9 @@ Usage:
 
     table   = setup_hapi(species)		  # this loads/downloads HITRAN data for molecules in species arrays and saves them to hit_path
 
-5 - you can now generate a transmittance spectrum where mol is an entry in species array, e.g. 'CH4'
+5 - you can now generate a transmittance spectrum where mol is an entry in species array, e.g. 'CH4' and iso_num is the number isotopologue to use
 
-    nu, spec = gen_transmission(mol,v0,vf,pres=pres, temp=temp, path_length=path_length)
+    nu, spec = gen_transmission(mol,v0,vf,pres=pres, temp=temp, path_length=path_length,iso_num=1)
 
 6 - you can use hapi to convolve it like this where resolution is delta_nu in cm-1
 

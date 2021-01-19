@@ -21,7 +21,7 @@ def hitran_ids(molecule):
 
 	return mol_num, iso_nums, global_nums
 
-def gen_transmission(molecule,v0,vf,pres=1, temp=300, path_length=10):
+def gen_transmission(molecule,v0,vf,pres=1, temp=300, path_length=10, iso_num=1):
 	"""
 	use hapi to  download hitran and generate transmission spectrum give pres, temp, pathlength from v0 to vf (cm-1)
 	
@@ -58,7 +58,7 @@ def gen_transmission(molecule,v0,vf,pres=1, temp=300, path_length=10):
 	select(molecule,Conditions=Cond,DestinationTableName='tmp')
 
 	# with table loaded, Loop through molecules again and save parameters 
-	nu,coef  = absorptionCoefficient_Lorentz(Components=((mol_id,1),),
+	nu,coef  = absorptionCoefficient_Lorentz(Components=((mol_id,iso_num),),
 											SourceTables='tmp',HITRAN_units=False,
 											Environment={'p':pres,'T':temp})
 	nu,spec  = transmittanceSpectrum(nu,coef,Environment={'l':path_length,\
