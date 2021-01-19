@@ -1,6 +1,6 @@
 Usage:
 
-0 - import hapi/(maybe also some hapi fxns..) if importing code
+0 - import hapi/(maybe also some hapi fxns..) if importing genspec.py, but I recommend editing it locally and running it
 
 1 - make location to store hitran files
 
@@ -28,9 +28,9 @@ Usage:
 
      nu_,trans_,i1,i2,slit = hapi.convolveSpectrum(nu, spec,SlitFunction=hapi.SLIT_GAUSSIAN,Resolution=0.04,AF_wing=10.0)
 
-* I also built in compare_sims whihc shows that the results are slightly different
+* I also built in compare_sims which compares HAPI results to SpectralPlot online app and shows that the results are slightly different
 * if you want multiple in one cell at total pressure P, evaluate each individual spectrum at P, but wth path_length equal to the fraction of the gas desired e.g. 1/3 of each gas at P=2, use P=2, with path_length = 2 * total_length/3 for each gas
-
+* will probably want to save the hapi sims to file..
 
 
 
