@@ -88,6 +88,86 @@ def setup_hapi(species):
 
 	return table
 
+def gen_gascell_spec(species, v0, vf, pres, temp, path_length, iso_nums):
+	"""
+	save spectra to file
+	"""
+	specdic = {}
+	specdic_lowres = {}
+	nspecies=len(species)
+	for mol in species:
+		specdic[mol] = {}
+		specdic_lowres[mol] = {}
+		for iso_num in iso_nums:
+			specdic[mol][iso_num] = gen_transmission(mol,v0,vf,pres=pres, 
+													temp=temp, path_length=path_length/nspecies,
+													iso_num=iso_num)
+			nu_,trans_,i1,i2,slit = hapi.convolveSpectrum(specdic[mol][iso_num][0],specdic[mol][iso_num][1],SlitFunction=hapi.SLIT_GAUSSIAN,Resolution=0.11,AF_wing=20.0)
+			specdic_lowres[mol][iso_num] = (nu_,trans_)
+
+	return specdic, specdic_lowres
+
+def save_gascell(specdic, savename):
+	"""
+	save specdics to file
+	"""
+	header = 'nu '
+	# calculate total spectrum
+	for i,mol in enumerate(specdic.keys()):
+		for j, iso_num in enumerate(specdic[mol].keys()):
+			if j==0: # if first isonum, start molspec total (spec total for that molecule)
+				nu = specdic[mol][iso_num][0]
+				molspec_total = specdic[mol][iso_num][1]
+				if i==0: # if first molecule in cell, start spec total (all mol and isonums)
+					spec_total = specdic[mol][iso_num][1]
+					f  = np.zeros((len(specdic.keys()), len(nu))) # store everything here
+				else:
+					spec_total*= specdic[mol][iso_num][1]
+			else:
+				spec_total*= specdic[mol][iso_num][1]
+				molspec_total *= specdic[mol][iso_num][1]
+		f[i] = molspec_total
+		header += mol  + ' '
+
+	# write out to text file
+	savedat = np.vstack((nu,f))
+	np.savetxt(savename,savedat.T,header=header)
+
+	return savedat
+
+def plot_spectra(savedat, title, savename , fignum=-1):
+	"""
+	"""
+	plt.figure(fignum,figsize=(12,6))
+	specdic = {}
+	for i,mol in enumerate(species):
+		plt.plot(savedat[0],savedat[1+i],label=mol)
+
+	plt.legend()
+	plt.xlabel('Wavenumber')
+	plt.ylabel('Transmittance')
+
+	plt.title(title)
+	plt.savefig(savename)
+
+def run(species,pres,temp,path_length,out_path,ploton=True,iso_nums=[1]):
+	# setup hapi, load tables once bc slow
+	# generate spec for each molecule "separately"
+	specdic, specdic_lowres = gen_gascell_spec(species, v0, vf, pres, temp, path_length,iso_nums)
+
+	# save it
+	moltag = ''
+	for mol in species:
+		moltag += '_%s' %mol 
+
+	savename = out_path + 'transpec_p_%s_t_%s_l_%s%s_%s' %(pres, temp, path_length, moltag,iso_nums)
+	savedat = save_gascell(specdic, savename + '.txt')
+	savedat_lowres = save_gascell(specdic_lowres, savename + '_lowres.txt')
+
+	title = 'Pres: %s Temp: %s Length: %s' %(pres, temp, path_length)
+	#plot_spectra(savedat, title, savename + '.png', fignum=-1)
+	plot_spectra(savedat_lowres, title, savename + '_lowres.png', fignum=-1)
+
 def compare_sims():	
 	"""
 	Compare SpectralPlot simulatinos to HAPI ones
@@ -107,6 +187,7 @@ def compare_sims():
 	plt.plot(f[:,0],np.exp(-1*f[:,1]),label='SpectralPlot')
 	plt.title('Pres %s Temp %s Length %s' %(pres, temp, path_length))
 	plt.legend()
+	plt.savefig('SpectraPlotSimulations/comp_spec_p%s_t%s_l%s.png'%(pres,temp,path_length))
 
 	f = np.loadtxt('SpectraPlotSimulations/CO2,x=1,T=300K,P=1atm,L=10cm,simNum3.csv',delimiter=',')
 	#gen corresponding hapi simulation
@@ -118,6 +199,7 @@ def compare_sims():
 	plt.plot(f[:,0],np.exp(-1*f[:,1]),label='SpectralPlot')
 	plt.title('Pres %s Temp %s Length %s' %(pres, temp, path_length))
 	plt.legend()
+	plt.savefig('SpectraPlotSimulations/comp_spec_p%s_t%s_l%s.png'%(pres,temp,path_length))
 
 
 	f = np.loadtxt('SpectraPlotSimulations/CO2,x=1,T=300K,P=.33atm,L=10cm,simNum4.csv',delimiter=',')
@@ -130,36 +212,26 @@ def compare_sims():
 	plt.plot(f[:,0],np.exp(-1*f[:,1]),label='SpectralPlot')
 	plt.title('Pres %s Temp %s Length %s' %(pres, temp, path_length))
 	plt.legend()
-
+	plt.savefig('SpectraPlotSimulations/comp_spec_p%s_t%s_l%s.png'%(pres,temp,path_length))
 
 
 if __name__=='__main__':
+	# define paths
 	hit_path = './hitran/' # make sure this path exists, location to store hitran files
-	species = np.array(['CH4', 'N2O', 'CO2'])
+	out_path = './HapiSimulations/'
+
+	# define gas cell params
+	species = np.array(['CO2']) #np.array(['CH4', 'N2O', 'CO2','HCN', 'H2O','C2H2'])
 	v0, vf  = 2325.0, 5129.0 # cm-1, 1.95-4.3 micron
-	
-	# setup hapi, load tables once bc slow
-	table   = setup_hapi(species) # this seems to be globally defined
+	pres, temp, path_length = 0.3, 300, 1
 
-	# define environemnt
-	pres, temp, path_length = 0.33, 300, 10
-
-	# generate spec for each molecule "separately"
-	plt.figure(1)
-	specdic = {}
-	for mol in species:
-		specdic[mol] = gen_transmission(mol,v0,vf,pres=pres, temp=temp, path_length=path_length)
-		#nu_,trans_,i1,i2,slit = hapi.convolveSpectrum(specdic[mol][0],specdic[mol][1],SlitFunction=hapi.SLIT_GAUSSIAN,Resolution=0.04,AF_wing=10.0)
-		plt.plot(*specdic[mol],label=mol)
-
-	plt.legend()
-	plt.title('Pres %s Temp %s Length %s' %(pres, temp, path_length))
+	#table   = setup_hapi(species) # this seems to be globally defined
+	_, iso_nums, _ = hitran_ids(species[0])
+	run(species,pres,temp,path_length,out_path,ploton=True,iso_nums=iso_nums)
 
 	# compare simulations hapi to spectralplot
-	compare_sims()
+	#compare_sims()
 
-	# if want multiple in one cell at total pressure P, evaluate each 
-	# individual spectrum at P, but wth path_length equal to the fraction of the gas desired
-	# e.g. 1/3 of each gas at P=2, use P=2, with path_length = 2 * total_length/3 for each gas
+
 
 
