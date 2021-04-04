@@ -135,22 +135,25 @@ def save_gascell(specdic, savename):
 
 	return savedat
 
-def plot_spectra(savedat, title, savename , fignum=-1):
+def plot_spectra(savedat, species, title, savename , fignum=-1):
 	"""
 	"""
 	plt.figure(fignum,figsize=(12,6))
 	specdic = {}
 	for i,mol in enumerate(species):
-		plt.plot(savedat[0],savedat[1+i],label=mol)
+		plt.plot(1e7/savedat[0],savedat[1+i],label=mol)
 
 	plt.legend()
-	plt.xlabel('Wavenumber')
+	plt.xlabel('Wavelength (nm)')
 	plt.ylabel('Transmittance')
+
+	plt.fill_between(1000*np.array([1.95,2.5]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+	plt.fill_between(1000*np.array([2.85,4.2]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
 
 	plt.title(title)
 	plt.savefig(savename)
 
-def run(species,pres,temp,path_length,out_path,ploton=True,iso_nums=[1]):
+def run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1]):
 	# setup hapi, load tables once bc slow
 	# generate spec for each molecule "separately"
 	specdic, specdic_lowres = gen_gascell_spec(species, v0, vf, pres, temp, path_length,iso_nums)
@@ -166,7 +169,10 @@ def run(species,pres,temp,path_length,out_path,ploton=True,iso_nums=[1]):
 
 	title = 'Pres: %s Temp: %s Length: %s' %(pres, temp, path_length)
 	#plot_spectra(savedat, title, savename + '.png', fignum=-1)
-	plot_spectra(savedat_lowres, title, savename + '_lowres.png', fignum=-1)
+	if ploton:
+		plot_spectra(savedat_lowres, species, title, savename + '_lowres.png', fignum=-1)
+
+	return savename, specdic, specdic_lowres
 
 def compare_sims():	
 	"""
@@ -215,22 +221,47 @@ def compare_sims():
 	plt.savefig('SpectraPlotSimulations/comp_spec_p%s_t%s_l%s.png'%(pres,temp,path_length))
 
 
+def gen_spec_gascell1():
+	"""
+	wrapper to run molecules for first fabricated gas cell
+	"""
+	hit_path = './hitran/' # make sure this path exists, location to store hitran files
+	out_path = './HapiSimulations/'
+
+	v0, vf = 2270, 5130 # cm-1, 1.95-4.3 micron
+	species = np.array(['CH4', 'N2O', 'CO2','C2H2', 'H2O'])
+
+	torr_to_atm = 0.00131579 #atm/torr
+	press    = torr_to_atm * np.array([23.3, 4.9, 15.2, 102.2, 2.2]) #Torr
+	airpress = torr_to_atm *22.3 # torr, added air pressure
+
+	press_tot = round(sum(press) + airpress ,3)
+	temp = 300
+	path_length = 1
+
+	table   = setup_hapi(species) # this seems to be globally defined
+	for specie in species:
+		_, iso_nums, _ = hitran_ids(specie)
+		savename, dic, diclow = run(np.array([specie]),v0, vf,press_tot,temp,path_length,out_path,ploton=True,iso_nums=[1])
+
+
+
 if __name__=='__main__':
 	# define paths
 	hit_path = './hitran/' # make sure this path exists, location to store hitran files
 	out_path = './HapiSimulations/'
 
 	# define gas cell params
-	species = np.array(['CO2']) #np.array(['CH4', 'N2O', 'CO2','HCN', 'H2O','C2H2'])
-	v0, vf  = 2325.0, 5129.0 # cm-1, 1.95-4.3 micron
+	species = np.array(['C2H2']) #np.array(['CH4', 'N2O', 'CO2','HCN', 'H2O','C2H2'])
+	v0, vf  = 2270, 5130 # cm-1, 1.95-4.3 micron
 	pres, temp, path_length = 0.3, 300, 1
 
-	#table   = setup_hapi(species) # this seems to be globally defined
+	table   = setup_hapi(species) # this seems to be globally defined
 	_, iso_nums, _ = hitran_ids(species[0])
-	run(species,pres,temp,path_length,out_path,ploton=True,iso_nums=iso_nums)
+	savename, dic, diclow = run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1])
 
 	# compare simulations hapi to spectralplot
-	#compare_sims()
+	# compare_sims()
 
 
 

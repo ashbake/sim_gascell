@@ -3,8 +3,31 @@
 import numpy as np
 import matplotlib.pylab as plt
 from scipy import interpolate
+from hapi import convolveSpectrum, SLIT_GAUSSIAN
 
 plt.ion()
+
+def define_lsf(v,res):
+	# define gaussian in pixel elements to convolve resolved spectrum with to get rightish resolution
+	dlam  = np.median(v)/res
+	fwhm = dlam/np.abs(np.mean(np.diff(v))) # desired lambda spacing over current lambda spacing resolved to give sigma in array elements
+	sigma = fwhm/2.634	
+	x = np.arange(sigma*20) + 0.5
+	if len(x)%2 == 1:
+		x = np.arange(sigma*20  +sigma/2) + 0.5# if not symmetric then will shift everything
+	gaussian = (1./sigma/np.sqrt(2*np.pi)) * np.exp(-0.5*( (x - 0.5*len(x))/sigma)**2 )
+
+	return gaussian
+
+def degrade_spec(x,y,res):
+	"""
+	given wavelength, flux array, and resolving power R, return  spectrum at that R
+	"""
+	lsf      = define_lsf(x,res=res)
+	y_lowres = np.convolve(y,lsf,mode='same')
+
+	return y_lowres
+
 
 def load_sim(p,t,l,mol,lowres=True):
 	if lowres:
@@ -15,30 +38,63 @@ def load_sim(p,t,l,mol,lowres=True):
 	return f[:,0],f[:,1]
 
 
-def plot_spec_wn(species, p, t, l):
-	plt.figure(fignum,figsize=(12,6))
+def plot_spec_wl(species, p, t, l,ratios, lowres=True,ltot=10,res=30000):
+	plt.figure(1,figsize=(12,6))
+	res=res if lowres else 1e6
+
 	for i,mol in enumerate(species):
-		x,y = load_sim(p,t,l,mol)
-		plt.plot(x, y,label=mol)
+		xx,yy = load_sim(p,t,l,mol,lowres=False) # set to high resolution spectrum, then convolve later
+		lam,y = 1e7/xx[::-1], yy[::-1]**(ltot * ratios[i])
+		if i==0: tot_spec = np.ones_like(y)
+		if i==0: xtot_spec = lam*1.0
+
+		if res < 1e6:
+			#dnu = np.median(1e7/lam)/res #match genspec setting
+			#test        = convolveSpectrum(1e7/lam[::-1],y[::-1],dnu,SlitFunction=SLIT_GAUSSIAN) 
+			#tck         = interpolate.splrep(1e7/test[0][::-1], test[1][::-1], s=0)
+			#y_res       = interpolate.splev(lam,tck,der=0,ext=0)
+			y_res      = degrade_spec(lam,y,res) # this shifts data meh
+		else:
+			y_res = y
+
+		plt.plot(lam,y_res,label=mol + ', %satm' %round(p * ratios[i],2),alpha=.7,zorder=100)
+		# add to totl spectrum
+		tck         = interpolate.splrep(lam,y_res, s=0)
+		spec_interp = interpolate.splev(xtot_spec,tck,der=0,ext=1)
+		spec_interp[np.where(spec_interp==0)] = 1
+
+		tot_spec*=spec_interp
 
 	plt.legend()
-	plt.xlabel('Wavenumber')
+	plt.xlabel('Wavelength (nm)')
 	plt.ylabel('Transmittance')
+	
 
+	title = 'Pres: %satm Temp: %sK Length: %scm R:%s' %(p, t, ltot,res)
+	plt.fill_between(1000*np.array([1.95,2.5]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+	plt.fill_between(1000*np.array([2.85,4.2]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+	plt.plot([1950,4300],[.95,0.95],'k--')
+
+	plt.ylim(-0.01,1.1)
 	plt.title(title)
-	plt.savefig(savename)
+	plt.savefig('HapiSimulations/plots/trn_spec_%s_p_%s_t_%s_l_%s_r_%s.pdf'%(species,p,t,ltot,res))
+
+	return xtot_spec,tot_spec,title
 
 
-def plot_spec_wl(species, p, t, l,lowres=True,ltot=10):
-	plt.figure(1,figsize=(12,6))
+def plot_spec_wl_old(species, p, t, l,ratios, lowres=True,ltot=10):
+	plt.figure(-1,figsize=(12,6))
+	res=30000 if lowres else 1e6
 
 	for i,mol in enumerate(species):
-		x,y = load_sim(p,t,l,mol,lowres=lowres)
+		xx,yy = load_sim(p,t,l,mol,lowres=lowres)
+		lam,y = 1e7/xx[::-1], yy[::-1]**(ltot * ratios[i])
 		if i==0: tot_spec = np.ones_like(y)
-		if i==0: xtot_spec = 1e7/x[::-1]
-		plt.plot(1e7/x, y**(ltot/len(species)),label=mol + ', %satm' %round(p/len(species),2),alpha=.7,zorder=100)
+		if i==0: xtot_spec = lam*1.0
+
+		plt.plot(lam,y,label=mol + ', %satm' %round(p * ratios[i],2),alpha=.7,zorder=100)
 		# add to totl spectrum
-		tck         = interpolate.splrep(1e7/x[::-1], y[::-1]**(ltot/len(species)), s=0)
+		tck         = interpolate.splrep(lam,y, s=0)
 		spec_interp = interpolate.splev(xtot_spec,tck,der=0,ext=0)
 
 		tot_spec*=spec_interp
@@ -47,16 +103,17 @@ def plot_spec_wl(species, p, t, l,lowres=True,ltot=10):
 	plt.xlabel('Wavelength (nm)')
 	plt.ylabel('Transmittance')
 	
-	res=30000 if lowres else 1e6
 	title = 'Pres: %satm Temp: %sK Length: %scm R:%s' %(p, t, ltot,res)
 	plt.fill_between(1000*np.array([1.95,2.5]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
 	plt.fill_between(1000*np.array([2.85,4.2]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+	plt.plot([1950,4300],[.95,0.95],'k--')
 
 	plt.ylim(-0.01,1.1)
 	plt.title(title)
 	plt.savefig('HapiSimulations/plots/trn_spec_%s_p_%s_t_%s_l_%s_r_%s.pdf'%(species,p,t,ltot,res))
 
 	return xtot_spec,tot_spec,title
+
 
 def overplot_online_spec(x,spec,p,t,l,lowres=False,ltot=10):
 	"""
@@ -111,7 +168,8 @@ def plot_totspec(x,spec,species,title,lowres):
 	plt.savefig('HapiSimulations/plots/trn_totspec_%s.pdf'%(species))
 
 	# save x, spec to file
-	np.savetxt('HapiSimulations/final/trn_totspec_%s_lowres.txt'%species, np.vstack((x,spec)).T,
+	if lowres:
+		np.savetxt('HapiSimulations/final/trn_totspec_%s_lowres.txt'%species, np.vstack((x,spec)).T,
 					header=title)
 
 
@@ -200,10 +258,84 @@ def plot_pres_change():
 	plt.xlim(3896.8,3897.2)
 	plt.ylim(0.2,1.1)
 
-if __name__=='__main__':
-	species = np.array(['CH4_[1]','N2O', 'CO2'])
-	p,t,l,ltot,lowres = 0.3,300,1,10,False
-	x,spec,title  = plot_spec_wl(species, 0.3, 300, 1,lowres=True,ltot=10)
 
-	plot_totspec(x,spec,species,title,True)
+def load_gascell_scan(file='LabData/Spectra/B0183.20/B0183.1a.dpt'):
+	"""
+	load gas cell scan keeyoon made
+	"""
+	f = np.loadtxt(file,delimiter=',')
+
+	x,y = f[:,0],f[:,1]
+
+	return 1e7/x[::-1], y[::-1]
+	#f = open(file,'r')
+	#lines = f.readlines()
+	#f.close()
+
+
+def plot_scan_model():
+	"""
+	plot lab scan with corresponding model
+
+	convolve with kpic resolution to see
+	"""
+	# parametrs from keeyoon's fits
+	# EDIT THESE ONCE GET DATA
+	# Using scanned gas cell properties from fit by keeyoon
+	# gas cell
+	species = np.array(['CH4_[1]','N2O_[1]', 'C2H2_[1]','CO2_[1]', 'H2O_[1]'])
+
+	# define cell 1 pressures, convert to atm
+	torr_to_atm = 0.00131579 #atm/torr
+	press    = torr_to_atm * np.array([23.3, 4.9, 15.2, 102.2, 2.2]) #Torr
+	airpress = torr_to_atm *22.3 # torr, added air pressure
+
+	#define ratios
+	p = round(sum(press) + airpress ,3)
+	ratios = press/p
+	lam,spec,title  = plot_spec_wl(species, p, 300, 1,ratios, lowres=False,ltot=10,res=500000)
+	plt.plot([1950,4300],[0.95,0.95],'k--')
+	plot_totspec(lam,spec,species,title,lowres)
+
+	xx,yy = load_gascell_scan()
+	plt.plot(1e7/xx,yy,'--',label='Cell 1 Scan Data',alpha=1)
+	plt.xlim(1900,4300)
+	plt.legend()
+
+	# plot at low res
+	lam,spec,title  = plot_spec_wl(species, p, 300, 1,ratios, lowres=True,ltot=10,res=30000)
+
+def first_requested_gascell():
+	species = np.array(['CH4_[1]','N2O_[1]', 'C2H2_[1]','CO2_[1]'])
+	ratios  = np.array([0.21666, 0.1666, 0.1666, 0.45]) # ratios out of 1 of each gas
+	# high res
+	p,t,l,ltot,lowres = 0.3,300,1,10,False # **must** have l=1 for doing this
+	x,spec,title  = plot_spec_wl(species, 0.3, 300, 1,ratios, lowres=lowres,ltot=10)
+	plt.plot([1950,4300],[0.95,0.95],'k--')
+	# low res
+	p,t,l,ltot,lowres = 0.3,300,1,10,True # **must** have l=1 for doing this
+	x,spec,title  = plot_spec_wl(species, 0.3, 300, 1, ratios, lowres=lowres,ltot=10)
+	plt.plot([1950,4300],[0.95,0.95],'k--')
+
+
+
+if __name__=='__main__':
+	# new spectrum
+	species = np.array(['CH4_[1]','N2O_[1]', 'C2H2_[1]','CO2_[1]'])
+	ratios  = np.array([0.21666, 0.1666, 0.1666, 0.45]) # ratios out of 1 of each gas
+	# high res
+	p,t,l,ltot,lowres = 0.3,300,1,10,False # **must** have l=1 for doing this
+	lam,spec,title  = plot_spec_wl(species, 0.3, 300, 1,ratios, lowres=lowres,ltot=10,res=1e6)
+	plt.plot([1950,4300],[0.95,0.95],'k--')
+	# low res
+	p,t,l,ltot,lowres = 0.3,300,1,10,True # **must** have l=1 for doing this
+	lam,spec,title  = plot_spec_wl(species, 0.3, 300, 1, ratios, lowres=lowres,ltot=10,res=30000)
+	plt.plot([1950,4300],[0.95,0.95],'k--')
+
+	plot_totspec(lam,spec,species,title,lowres)
+	plt.plot([1950,4300],[0.95,0.95],'k--')
+
+
+
+
 
