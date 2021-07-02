@@ -168,7 +168,8 @@ def run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1],
 	title = 'Pres: %s Temp: %s Length: %s' %(pres, temp, path_length)
 	#plot_spectra(savedat, title, savename + '.png', fignum=-1)
 	if ploton:
-		plot_spectra(savedat_lowres, species, title, savename + '_lowres.png', fignum=-1)
+		plot_spectra(savedat, species, title, savename + '.png', fignum=-1)
+		#plot_spectra(savedat_lowres, species, title, savename + '_lowres.png', fignum=-1)
 
 	return savename, specdic, specdic_lowres
 
