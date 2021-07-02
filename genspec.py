@@ -54,7 +54,7 @@ def gen_transmission(molecule,v0,vf,pres=1, temp=300, path_length=10, iso_num=1)
 	mol_id, iso_nums, _ = hitran_ids(molecule)
 
 	# select subtable
-	Cond = ('AND',('BETWEEN','nu',v0,vf),('>=','sw',1e-28)) 
+	Cond = ('AND',('BETWEEN','nu',v0,vf),('>=','sw',1e-29)) 
 	select(molecule,Conditions=Cond,DestinationTableName='tmp')
 
 	# with table loaded, Loop through molecules again and save parameters 
@@ -66,7 +66,7 @@ def gen_transmission(molecule,v0,vf,pres=1, temp=300, path_length=10, iso_num=1)
 
 	return nu, spec
 
-def setup_hapi(species):
+def setup_hapi(species,rerun=True):
 	"""
 	download HITRAN catalogs needed for each species
 
@@ -76,9 +76,7 @@ def setup_hapi(species):
 	table = tableList()
 
 	for molecule in species:
-		if molecule in table:
-			pass
-		else:
+		if molecule not in table or rerun==True:
 			# Download so can work offline ..no idea where this stores shit and i htink it fails so just d/l it yourself
 			_, iso_nums, global_nums = hitran_ids(molecule)
 			print('Downloading Hitran data for ' + molecule)
@@ -88,7 +86,7 @@ def setup_hapi(species):
 
 	return table
 
-def gen_gascell_spec(species, v0, vf, pres, temp, path_length, iso_nums):
+def gen_gascell_spec(species, v0, vf, pres, temp, path_length, iso_nums,res=.11):
 	"""
 	save spectra to file
 	"""
@@ -102,7 +100,7 @@ def gen_gascell_spec(species, v0, vf, pres, temp, path_length, iso_nums):
 			specdic[mol][iso_num] = gen_transmission(mol,v0,vf,pres=pres, 
 													temp=temp, path_length=path_length/nspecies,
 													iso_num=iso_num)
-			nu_,trans_,i1,i2,slit = hapi.convolveSpectrum(specdic[mol][iso_num][0],specdic[mol][iso_num][1],SlitFunction=hapi.SLIT_GAUSSIAN,Resolution=0.11,AF_wing=20.0)
+			nu_,trans_,i1,i2,slit = hapi.convolveSpectrum(specdic[mol][iso_num][0],specdic[mol][iso_num][1],SlitFunction=hapi.SLIT_GAUSSIAN,Resolution=res)
 			specdic_lowres[mol][iso_num] = (nu_,trans_)
 
 	return specdic, specdic_lowres
@@ -147,16 +145,16 @@ def plot_spectra(savedat, species, title, savename , fignum=-1):
 	plt.xlabel('Wavelength (nm)')
 	plt.ylabel('Transmittance')
 
-	plt.fill_between(1000*np.array([1.95,2.5]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
-	plt.fill_between(1000*np.array([2.85,4.2]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+	#plt.fill_between(1000*np.array([1.95,2.5]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+	#plt.fill_between(1000*np.array([2.85,4.2]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
 
 	plt.title(title)
 	plt.savefig(savename)
 
-def run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1]):
+def run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1],res=0.11):
 	# setup hapi, load tables once bc slow
 	# generate spec for each molecule "separately"
-	specdic, specdic_lowres = gen_gascell_spec(species, v0, vf, pres, temp, path_length,iso_nums)
+	specdic, specdic_lowres = gen_gascell_spec(species, v0, vf, pres, temp, path_length,iso_nums,res=res)
 
 	# save it
 	moltag = ''
@@ -164,7 +162,7 @@ def run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1])
 		moltag += '_%s' %mol 
 
 	savename = out_path + 'transpec_p_%s_t_%s_l_%s%s_%s' %(pres, temp, path_length, moltag,iso_nums)
-	savedat = save_gascell(specdic, savename + '.txt')
+	savedat  = save_gascell(specdic, savename + '.txt')
 	savedat_lowres = save_gascell(specdic_lowres, savename + '_lowres.txt')
 
 	title = 'Pres: %s Temp: %s Length: %s' %(pres, temp, path_length)
@@ -245,6 +243,27 @@ def gen_spec_gascell1():
 		savename, dic, diclow = run(np.array([specie]),v0, vf,press_tot,temp,path_length,out_path,ploton=True,iso_nums=[1])
 
 
+def gen_spec_gascell_newrequest():
+	"""
+	wrapper to run molecules for first fabricated gas cell
+	"""
+	hit_path = './hitran/' # make sure this path exists, location to store hitran files
+	out_path = './HapiSimulations/'
+
+	v0, vf = 2270, 5130 # cm-1, 1.95-4.3 micron
+	species = np.array(['CH4', 'N2O', 'CO2','C2H2'])
+
+	press    = np.array([0.06, 0.07, 0.16, 0.06]) #atm
+
+	press_tot = round(sum(press),3)
+	temp = 300
+	path_length = 1
+
+	table   = setup_hapi(species) # this seems to be globally defined
+	for specie in species:
+		_, iso_nums, _ = hitran_ids(specie)
+		savename, dic, diclow = run(np.array([specie]),v0, vf,press_tot,temp,path_length,out_path,ploton=True,iso_nums=[1])
+
 
 if __name__=='__main__':
 	# define paths
@@ -252,11 +271,11 @@ if __name__=='__main__':
 	out_path = './HapiSimulations/'
 
 	# define gas cell params
-	species = np.array(['C2H2']) #np.array(['CH4', 'N2O', 'CO2','HCN', 'H2O','C2H2'])
-	v0, vf  = 2270, 5130 # cm-1, 1.95-4.3 micron
-	pres, temp, path_length = 0.3, 300, 1
+	species = np.array(['HCN']) #np.array(['CH4', 'N2O', 'CO2','HCN', 'H2O','C2H2'])
+	v0, vf  = 6300, 6800 # cm-1, 1.95-4.3 micron
+	pres, temp, path_length = 0.026, 300, 5.5 # atm, K, cm
 
-	table   = setup_hapi(species) # this seems to be globally defined
+	table   = setup_hapi(species,rerun=True) # this seems to be globally defined
 	_, iso_nums, _ = hitran_ids(species[0])
 	savename, dic, diclow = run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1])
 

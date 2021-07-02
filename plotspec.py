@@ -39,7 +39,7 @@ def load_sim(p,t,l,mol,lowres=True):
 
 
 def plot_spec_wl(species, p, t, l,ratios, lowres=True,ltot=10,res=30000):
-	plt.figure(1,figsize=(12,6))
+	plt.figure(figsize=(12,6))
 	res=res if lowres else 1e6
 
 	for i,mol in enumerate(species):
@@ -321,15 +321,18 @@ def first_requested_gascell():
 
 if __name__=='__main__':
 	# new spectrum
-	species = np.array(['CH4_[1]','N2O_[1]', 'C2H2_[1]','CO2_[1]'])
-	ratios  = np.array([0.21666, 0.1666, 0.1666, 0.45]) # ratios out of 1 of each gas
+	species = np.array(['CH4_[1]', 'C2H2_[1]','CO2_[1]'])
+	pressures  = np.array([0.15, 0.05, 0.15])  # ratios out of 1 of each gas
+	ratios     = pressures/np.sum(pressures)
+
 	# high res
-	p,t,l,ltot,lowres = 0.3,300,1,10,False # **must** have l=1 for doing this
-	lam,spec,title  = plot_spec_wl(species, 0.3, 300, 1,ratios, lowres=lowres,ltot=10,res=1e6)
-	plt.plot([1950,4300],[0.95,0.95],'k--')
+	#p,t,l,ltot,lowres = 0.3,300,1,10,False # **must** have l=1 for doing this
+	#lam,spec,title  = plot_spec_wl(species, 0.3, 300, 1,ratios, lowres=lowres,ltot=10,res=1e6)
+	#plt.plot([1950,4300],[0.95,0.95],'k--')
+
 	# low res
-	p,t,l,ltot,lowres = 0.3,300,1,10,True # **must** have l=1 for doing this
-	lam,spec,title  = plot_spec_wl(species, 0.3, 300, 1, ratios, lowres=lowres,ltot=10,res=30000)
+	p,t,l,ltot,lowres = 0.35,300,1,10,True # **must** have l=1 for doing this
+	lam,spec,title  = plot_spec_wl(species, p, 300, 1, ratios, lowres=lowres,ltot=10,res=30000)
 	plt.plot([1950,4300],[0.95,0.95],'k--')
 
 	plot_totspec(lam,spec,species,title,lowres)
