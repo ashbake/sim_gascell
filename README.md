@@ -1,23 +1,17 @@
-Usage:
+## Usage:
 
-0 - import hapi/(maybe also some hapi fxns..) if importing genspec.py instead of just running an edited version
+Clone the environment and cd into the directory and run:
 
-1 - define paths - must create these folders if they dont already exist
-	hit_path = './hitran/'              
-	out_path = './HapiSimulations/'
+```
+python example_run.py
+```
 
-2 - define gas cell params and wavenumber range
-	species = np.array(['CH4', 'N2O', 'CO2'])
-	v0, vf  = 2325.0, 5129.0           # cm-1, 1.95-4.3 micron
-	pres, temp, path_length  = 0.3, 300, 10 # atm, K, cm
+## Notes:
+example_run.py can be edited with the partial pressures of each gas, the final spectral resolution, the temperature, and wavelength range. Note that the code has been validated against other gas cell simulation codes, but enough edits have happened now that the output should be re-validated using https://hitran.iao.ru/gasmixture/simlaunch or http://spectraplot.com/absorption 
 
-3 - run code - this saves it to out_path with option of plotting
-	run(species,pres,temp,path_length,out_path,ploton=True)
+## Details
+Since hapi assumes pressure broadening is just due to air broadening, the code makes some simplifications in generating the combined gas cell. It works by generating 1D transmittance models for individual gas species at the total pressure of the final gas cell and a cell length of l0=1cm (this is done using the HITRAN hapi.py code, documentation here: .).  These files are saved and then reloaded and are multiplied together after raising each molecule's transmittance values to the power of (p_fraction * l_tot/l0), where p_fraction is the ratio of the gas's partial pressure in the cell to the total cell pressure, and l_tot is the total gas cell length in cm. This basically scales to the amount of the gas in the cell.
 
-
-* I also built in compare_sims which compares HAPI results to SpectralPlot online app and shows that the results are slightly different
-* if you want multiple in one cell at total pressure P, evaluate each individual spectrum at P, but wth path_length equal to the fraction of the gas desired e.g. 1/3 of each gas at P=2, use P=2, with path_length = 2 * total_length/3 for each gas
-* will probably want to save the hapi sims to file..
 
 
 
