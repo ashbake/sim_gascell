@@ -8,7 +8,7 @@ from gascell import setup_hapi, hitran_ids, run_gen_spec, run_combine_spec
 
 ## EDIT ME ###
 # define paths
-hit_path = './hitran/' # make sure this path exists, location to store hitran files
+hit_path = './hitran/' # make sure this path exists, location to store hitran files from table query
 out_path = './HapiSimulations/' # make sure this path exists, location to save hitran files
 
 # Cell params
@@ -34,4 +34,4 @@ if __name__=='__main__':
 		_, _ = run_gen_spec(np.array([specie]),v0, vf,p,t,l0,out_path,ploton=True,iso_nums=iso_nums) # next fxn reloads outputs from the save file so dont need outputs here
 	
 	# Combine into one cell, then degrades resolution,saves plot and text file with lam and tot_spec
-	lam,tot_spec = run_combine_spec(partial_pressures,t,l,R,species,iso_nums,plot=True,save=True,out_path='./HapiSimulations/')
+	lam,tot_spec = run_combine_spec(partial_pressures,t,l,R,species,iso_nums,plot=True,save=True,out_path=out_path)
