@@ -1,3 +1,6 @@
 .DS_Store
 hitran/.DS_Store
 SpectralPlotSimulations/.DS_Store
+hitran/
+HapiSimulations/
+__pychache__
