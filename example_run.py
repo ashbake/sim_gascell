@@ -30,19 +30,27 @@ v0, vf = 1e7/2000, 1e7/980 # cm-1, 1.95-4.3 micron , wavelength range to gen spe
 
 
 if __name__=='__main__':
-	l0 = 1 # just always set l0=1 for generating spectra that will be used to scale to other cell lengths
+	# EXAMPLE OF RUNNING A LIST OF SPECIES
 
-	# make and save new spectra for each molecule for params defined above. maybe add check to see if files exist already
-	table   = setup_hapi(species,v0,vf,hit_path=hit_path,rerun=False) # this seems to be globally defined
-	specdic = gen_transmission_all(species, v0, vf, pressures, t, l0, [1]) # next fxn reloads outputs from the save file so dont need outputs here
+	# LOAD TABLE
+	# this seems to be globally defined - 
+	# it loads all files in hitran/ folder so will be slow if have a lot of files in there.
+	# Will download files it needs if it doesnt already exist
+	table   = setup_hapi(species,v0,vf,hit_path=hit_path,rerun=False)           
 	
+	# This loads transmission spectra at some hapi decided wavelength sampling for each species
+	# pressures and lengths inputs can be floats and the code will assume that for all species
+	# it is easiest to set iso_nums to [1] to just query the most prevalent isotopologue, but can also make this a list
+	specdic = gen_transmission_all(species, v0, vf, pressures, t, lengths, [1]) # This loads all spectra for each species for each pressure
+	
+
 	# plot each species
+	# also plot the spectra at a degraded resolution for reference
 	plt.figure()
 	for key in specdic.keys():
 		# degrade spectrum version
 		x,y = 1e7/specdic[key][1][0],specdic[key][1][1]
 		lowres_spec = degrade_spec(x,y, R)
-		#np.where()
 		p = plt.plot(x,y,alpha=0.5,ls='--')
 		plt.plot(x,lowres_spec,c=p[0].get_color(),label=key + ' %satm %scm'%(pressures[species==key],lengths[species==key]))
 	
@@ -52,6 +60,9 @@ if __name__=='__main__':
 	plt.show()
 	plt.axhline(0.95, color='k', ls='--')
 
+	# TESTING ADDING SECOND UNABSORBING SPECIES
+	# this has CO2 at 0.1 atm and a second source at 0.1 atm
+	# this runs the whole cell at 0.2atm but the CO2 spectrum is effectively halved to account for half the absorbers
 	species = np.array([ 'CO2'])         
 	pressures = np.array([0.1,0.1])
 	p = np.sum(pressures) 
