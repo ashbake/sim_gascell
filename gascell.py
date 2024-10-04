@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pylab as plt
 from scipy import interpolate
 
-import hapi
+import hapi,os
 from hapi import db_begin, absorptionCoefficient_Lorentz, select,transmittanceSpectrum, tableList, fetch_by_ids, getHelp
 
 plt.ion()
@@ -10,6 +10,16 @@ plt.ion()
 def hitran_ids(molecule):
 	"""
 	given molecule name, return hitran molecule id and isotopologues list
+	
+	inputs
+	-------
+	molecule - string of molecule to plot
+
+	outputs
+	--------	
+	mol_num - hitran molecule number
+	iso_nums - list of isotopologues
+	global_nums - list of global ids
 	"""
 	ids = hapi.ISO_ID
 
@@ -52,7 +62,8 @@ def gen_transmission_one(molecule,v0,vf,pres=1, temp=300, path_length=10, iso_nu
 	select('tmp',ParameterNames=("gamma_self",'gamma_air'))   
 	hapi.describeTable('tmp') 
 	"""
-	mol_id, iso_nums, _ = hitran_ids(molecule)
+	mol_id, _, _ = hitran_ids(molecule)
+	if iso_num == 'all': _, iso_num, _ = hitran_ids(molecule)
 
 	# select subtable
 	Cond = ('AND',('BETWEEN','nu',v0,vf),('>=','sw',1e-29)) 
@@ -71,8 +82,11 @@ def setup_hapi(species,v0,vf,rerun=True,hit_path='./hitran/'):
 	"""
 	download HITRAN catalogs needed for each species
 
-	returns table
+	returns hapi specific table
 	"""
+	# make hitpath if doesnt exist
+	if not os.path.exists(hit_path): os.makedirs(hit_path)
+
 	db_begin(hit_path)
 	table = tableList()
 
@@ -87,22 +101,48 @@ def setup_hapi(species,v0,vf,rerun=True,hit_path='./hitran/'):
 
 	return table
 
-def gen_transmission_all(species, v0, vf, pres, temp, path_length, iso_nums,res=.11):
+def gen_transmission_all(species, v0, vf, pres, temp, path_length, iso_nums):#,res=.11):
 	"""
-	save spectra to file
+		Run a bunch of species, each individual at one pressure and temperature and length.
+		Parameters:
+		-----------
+		species : list
+			List of species to run.
+		v0 : float
+			Initial frequency.
+		vf : float
+			Final frequency.
+		pres : float
+			Pressure.
+		temp : float
+			Temperature.
+		path_length : float
+			Path length.
+		iso_nums : str or list
+			Either 'all' or a list of isotope numbers.
+		Returns:
+		--------
+		specdic
+			A dictionary containing the transmission data for each species and isotope number
 	"""
 	specdic = {}
-	nspecies=len(species)
-	for mol in species:
+	for i,mol in enumerate(species):
 		specdic[mol] = {}
-		for iso_num in iso_nums:
-			specdic[mol][iso_num] = gen_transmission_one(mol,v0,vf,pres=pres, 
+		if iso_nums=='all':
+			_, all_iso_nums, _ = hitran_ids(mol)
+			specdic[mol]['all_iso'] = gen_transmission_one(mol,v0,vf,pres=pres[i], 
+													temp=temp, path_length=path_length,#/nspecies,
+													iso_num=all_iso_nums)	
+		else:
+			for iso_num in iso_nums:
+				specdic[mol][iso_num] = gen_transmission_one(mol,v0,vf,pres=pres[i], 
 													temp=temp, path_length=path_length,#/nspecies,
 													iso_num=iso_num)
 			# if want to degrade resolution through hapi tool:
 			#nu_,trans_,i1,i2,slit = hapi.convolveSpectrum(specdic[mol][iso_num][0],specdic[mol][iso_num][1],SlitFunction=hapi.SLIT_GAUSSIAN,Resolution=res)
 
 	return specdic
+
 
 def save_gascell(specdic, savename):
 	"""
@@ -151,9 +191,29 @@ def plot_spectra(savedat, species, title, savename , fignum=-1):
 	plt.savefig(savename)
 
 def run_gen_spec(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1],res=0.11):
-	# setup hapi, load tables once bc slow
+	"""# setup hapi, load tables once bc slow
 	# generate spec for each molecule "separately"
-	specdic = gen_transmission_all(species, v0, vf, pres, temp, path_length,iso_nums,res=res)
+
+	inputs
+	-------
+	species - list of molecules to simulate
+	v0, vf - start and final wavenumbers (cm-1) to generate spectrum over
+	pres - pressure in atm
+	temp- temperature in kelvin
+	path_length - length of tube in centimeters
+	out_path - path to save files
+	ploton - plot the spectra
+	iso_nums - list of isotopologues to simulate
+	res - resolution of the spectra
+
+	outputs
+	--------
+	savename - name of saved file
+	specdic - dictionary of spectra
+	"""
+	if not os.path.exists(out_path): os.makedirs(out_path)
+	
+	specdic = gen_transmission_all(species, v0, vf, pres, temp, path_length,iso_nums)
 
 	# save it
 	moltag = ''
@@ -174,7 +234,6 @@ def load_sim(p,t,l,mol,iso_nums,lowres=True):
 
 	return f[:,0],f[:,1]
 
-
 def define_lsf(v,res):
 	# define gaussian in pixel elements to convolve resolved spectrum with to get rightish resolution
 	dlam  = np.median(v)/res
@@ -185,11 +244,23 @@ def define_lsf(v,res):
 		x = np.arange(sigma*20  +sigma/2) + 0.5# if not symmetric then will shift everything
 	gaussian = (1./sigma/np.sqrt(2*np.pi)) * np.exp(-0.5*( (x - 0.5*len(x))/sigma)**2 )
 
+	if len(gaussian) < 20:
+		raise(ValueError('Wavelength sampling too coarse for requestion resolving power - resample wavelength grid finer or lower resolution'))
+	
 	return gaussian
 
 def degrade_spec(x,y,res):
 	"""
 	given wavelength, flux array, and resolving power R, return  spectrum at that R
+	inputs
+	-------
+	x - wavelength array
+	y - flux array
+	res - resolving power
+
+	outputs
+	--------
+	y_lowres - degraded spectrum
 	"""
 	lsf      = define_lsf(x,res=res)
 	y_lowres = np.convolve(y,lsf,mode='same')
@@ -200,18 +271,20 @@ def run_combine_spec(partial_pressures,t,l,R,species,iso_nums,plot=True,save=Tru
 	"""
 	take the spectra made for given pres, temp and 
 	"""
+	if not os.path.exists(out_path): os.makedirs(out_path)
+
 	p = sum(partial_pressures)
 	ratios     = partial_pressures/p # ratio of pressures
 
 	if plot: plt.figure()
 	for i,mol in enumerate(species):
-		xx,yy = load_sim(p,t,1,mol,iso_nums) # set to high resolution spectrum, then convolve later
+		xx,yy = load_sim(np.array([p]),t,1,mol,iso_nums) # set to high resolution spectrum, then convolve later
 		lam,y = 1e7/xx[::-1], yy[::-1]**(l * ratios[i])
 		if i==0: tot_spec = np.ones_like(y)
 		if i==0: xtot_spec = lam*1.0
 
-		if R < 5e6:
-			y_res      = degrade_spec(lam,y,R) # this shifts data meh
+		if R < 300000:
+			y_res      = degrade_spec(lam,y,R) 
 		else:
 			y_res = y
 
@@ -228,8 +301,8 @@ def run_combine_spec(partial_pressures,t,l,R,species,iso_nums,plot=True,save=Tru
 		plt.xlabel('Wavelength (nm)')
 		plt.ylabel('Transmittance')
 	
-		plt.fill_between(1000*np.array([1.95,2.5]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
-		plt.fill_between(1000*np.array([2.85,4.2]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+		#plt.fill_between(1000*np.array([1.95,2.5]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
+		#plt.fill_between(1000*np.array([2.85,4.2]), -0.2, y2=1.2,zorder=-100,facecolor='gray',alpha=0.3)
 
 		plt.ylim(-0.01,1.1)
 		title = 'Simulate Gas Cell, R=%s, T=%sK, $P_{tot}$=%satm'%(R,t,p)
@@ -247,22 +320,20 @@ def run_combine_spec(partial_pressures,t,l,R,species,iso_nums,plot=True,save=Tru
 
 
 
-
-
 if __name__=='__main__':
 	# define paths
-	hit_path = './hitran/' # make sure this path exists, location to store hitran files
+	hit_path = './hitran/' 
 	out_path = './HapiSimulations/'
 
 	# define gas cell params
-	species = np.array(['CH4', 'CO2'])
-	v0, vf  = 11000, 25000 # cm-1, 1.95-4.3 micron
-	pres, temp, path_length = 0.1, 200, 10 # atm, K, cm
+	species = np.array(['CH4', 'NH3'])
+	v0, vf = 1e7/2000, 1e7/980 # cm-1, 1.95-4.3 micron , wavelength range to gen spectra over
+	pres, temp, path_length = 0.1, 273, 10 # atm, K, cm
 
-	table   = setup_hapi(species,v0,vf,rerun=True) # this seems to be globally defined
-	_, iso_nums, _ = hitran_ids(species[0])
-	savename, dic, diclow = run(species,v0, vf, pres,temp,path_length,out_path,ploton=True,iso_nums=[1],res=0.433)
-
+	# make and save new spectra for each molecule for params defined above. maybe add check to see if files exist already
+	table   = setup_hapi(species,v0,vf,hit_path=hit_path,rerun=False) # this seems to be globally defined
+	specdic = gen_transmission_all(species, v0, vf, pres, temp, path_length, iso_nums) # next fxn reloads outputs from the save file so dont need outputs here
+	
 	# compare simulations hapi to spectralplot
 	# compare_sims()
 

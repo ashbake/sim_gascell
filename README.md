@@ -18,6 +18,11 @@ Usage:
 * I also built in compare_sims which compares HAPI results to SpectralPlot online app and shows that the results are slightly different
 * if you want multiple in one cell at total pressure P, evaluate each individual spectrum at P, but wth path_length equal to the fraction of the gas desired e.g. 1/3 of each gas at P=2, use P=2, with path_length = 2 * total_length/3 for each gas
 * will probably want to save the hapi sims to file..
+*if you change the wavelength range then you should delete the hitran files and rerun the code 
+so that it initiates a download again with the correct 'nu' data. if no transitions exist
+in a region then an error will occur
 
+4/1/21 Note: I took the gh version on april 1 2021 to make plotspec_gh then updated the plot_wl function so that it convolves the high resolution spectrum to R~30000 or whatever res is wanted. plotspec2 may be pointless, plotspec and plotspec2 should be similar and have the code to open the gas cell. data without an isotopologue [1] number in the name are wrong at low resolution. I must have changed the resolution. So the lines looked deeper if using those files. plotspec_gh.py is most reliable although the change of resolution fix isn't a big deal. its just more accurate to convolve after adjusting the high res spectrum, but the errors for the purposes here were small.
 
+To do: should consolidate the files/functions. then reupload to github and make a development branch and be happy w/ master branch
 
